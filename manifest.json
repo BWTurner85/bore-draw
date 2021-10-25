@@ -1,0 +1,18 @@
+{
+  "manifest_version": 2,
+
+  "name": "Bore Drawer",
+  "version": "0.1",
+  "description": "Bet365 bore drawer scanner",
+
+  "background": {
+    "scripts": [ "background.js" ]
+  },
+
+  "options_ui": {
+    "page": "index.html",
+    "open_in_tab": true
+  },
+
+  "permissions": [ "storage", "tabs", "https://www.bet365.com.au/*", "https://www.betfair.com.au/*" ]
+}
