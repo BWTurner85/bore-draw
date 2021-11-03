@@ -102,7 +102,7 @@
 
         const league = document.querySelector('.sph-Breadcrumb').innerText.substring(9);
         const teams = document.querySelector('.sph-EventHeader_Label span').innerText.split(' v ');
-        const oddsEls = btnAll.parentNode.parentNode.parentNode.parentNode.querySelectorAll('.gl-Market_General-cn1')
+        const oddsEls = btnAll.parentNode.parentNode.parentNode.parentNode.querySelectorAll('.gl-Market_General-cn1');
 
         chrome.storage.local.get([ 'bet365Data' ], storage => {
             let scoreData = [];
@@ -125,6 +125,7 @@
 
             const game = { league: league, teamA: teams[0], teamB: teams[1], scores: scoreData }
             data[league].push(game);
+            console.log(game);
 
             // TODO: Could reduce page loads by clicking through to the next game directly from here
             chrome.storage.local.set({ bet365Data: data }, () => window.history.back())

@@ -1,6 +1,7 @@
 (() => {
     if (/^https:\/\/www.betfair.com.au\/exchange\/plus\/football\/market\//.test(location.href)) {
-        processGame()
+        console.log("processing game");
+        awaitPageLoad('bf-mini-market-container', processGame)
     }
 
     if (!/^https:\/\/www.betfair.com.au\/exchange\/plus\/football(\/\d+)?$/.test(location.href)) {
@@ -66,6 +67,18 @@
     }
 
     function processGame() {
+        const markets = document.querySelectorAll('bf-mini-market-container');
 
+        const correctScoreMarket = Array.from(markets).find(
+            market => market.querySelector('.market-name-label').innerText === 'Correct Score'
+        );
+
+        Array.from(correctScoreMarket.querySelectorAll('.runner-line')).forEach(scoreLine => {
+            const score = scoreLine.querySelector('.runner-name').innerText;
+            const layOdds = scoreLine.querySelector('button.lay .bet-button-price').innerText;
+            const liquidity = scoreLine.querySelector('button.lay .bet-button-size').innerText.replace('$', '');
+
+            console.log(score, layOdds, liquidity);
+        })
     }
 })()
