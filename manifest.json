@@ -10,9 +10,31 @@
   },
 
   "options_ui": {
-    "page": "index.html",
+    "page": "src/index.html",
     "open_in_tab": true
   },
 
-  "permissions": [ "storage", "tabs", "https://www.bet365.com.au/*", "https://www.betfair.com.au/*" ]
+  "browser_action": {
+    "default_icon": {
+      "16": "./src/images/365soccer.png",
+      "32": "./src/images/365soccer.png",
+      "48": "./src/images/365soccer.png",
+      "128": "./src/images/365soccer.png"
+    }
+  },
+
+  "icons": {
+    "16": "./src/images/365soccer.png",
+    "32": "./src/images/365soccer.png",
+    "48": "./src/images/365soccer.png",
+    "128": "./src/images/365soccer.png"
+  },
+
+  "permissions": [
+    "storage",
+    "tabs",
+    "contextMenus",
+    "https://www.bet365.com.au/*",
+    "https://www.betfair.com.au/*"
+  ]
 }
