@@ -1,4 +1,5 @@
 export const Action = {
+    REMOVE_TAB: 'removeTab',
     START_SCRAPE: 'startScrape',
     ABORT_SCRAPE: 'abortScrape',
     COMPLETED_SCRAPE: 'completedScrape',

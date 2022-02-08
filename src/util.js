@@ -1,5 +1,5 @@
 import {debug} from "./logger";
-
+import { leagueMap } from "./data/leagueMapping";
 /**
  * Betfair loads the left hand navigation via ajax. This function lets us wait until a given type
  * of link appears to have been fully loaded before proceeding with a required action
@@ -14,11 +14,14 @@ export function awaitMultiElementLoad(selector, callback, interval = 500, maxAtt
     let elements = []
     let attempts = 0;
 
-    console.log("awaitMultiElementLoad");
     const intervalId = setInterval(() => {
         const prevCount = elements ? elements.length : -1
-        elements = Array.from(document.querySelectorAll(selector))
-        debug(`looking for elements: ${selector} - found: ` + elements.length)
+
+        if (typeof selector === 'function') {
+            elements = selector()
+        } else {
+            elements = Array.from(document.querySelectorAll(selector))
+        }
 
         if (elements.length > 0 && elements.length === prevCount) {
             clearInterval(intervalId)
@@ -51,7 +54,7 @@ export function awaitPageLoad(selector, callback, timeout= 0, timeoutCallback = 
                 callback()
             } else if (timeout > 0 && attempts > timeout) {
                 clearInterval(intervalId)
-                timeoutCallback()
+                timeoutCallback ? timeoutCallback() : callback()
             }
 
             attempts++;
@@ -87,4 +90,21 @@ export function upsertToLocalStorageObject(objectKey, values, callback = null) {
             }
         )
     })
+}
+
+/**
+ * Normalise a league name according to defined league name normalisers
+ *
+ * @param leagueName
+ * @returns {*}
+ */
+export function normaliseLeague(leagueName)
+{
+    if (!leagueName) {
+        return leagueName
+    }
+
+    leagueMap.normalisers.forEach(normaliser => leagueName = leagueName.replace(normaliser.find,normaliser.replace))
+
+    return leagueName
 }

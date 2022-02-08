@@ -57,6 +57,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     debug("Message received: ", message);
 
     switch (message.action) {
+        /** Close a tab **/
+        case Action.REMOVE_TAB:
+            chrome.tabs.remove(message.tabId)
+            break
+
         /** Kick off scraping for the specified bookie */
         case Action.START_SCRAPE:
             startScrape(message.bookie)
@@ -176,6 +181,31 @@ function stateKey(bookie) {
     return 'scrapeState' + bookie;
 }
 
+/** Configure an alarm to trigger regularly and use to kick off periodic refreshes */
+chrome.alarms.create(
+    'checkRefresh',
+    {
+        delayInMinutes: 1,
+        periodInMinutes: 1
+    }
+)
+
+/** Listen for alarm events **/
+chrome.alarms.onAlarm.addListener(alarm => {
+    if (alarm.name === 'checkRefresh') {
+        triggerPeriodicRefresh();
+    }
+})
+
+/** Trigger periodic refreshes **/
+function triggerPeriodicRefresh() {
+    console.log("Triggering periodic refresh")
+    // Trigger full refresh if more than 1 day since last one
+
+    // trigger refresh of oldest listed game
+}
+
+/*
 chrome.contextMenus.create({
     title: "Scrape game page",
     "contexts": [ "browser_action" ],
@@ -192,4 +222,4 @@ chrome.contextMenus.create({
             }
         )
     }
-})
+})*/

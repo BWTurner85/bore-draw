@@ -97,18 +97,22 @@ function getLeagueLabel(league) {
 function getCommonLeagues(bet365Data, betfairData) {
     let commonLeagues = []
 
-    Object.keys(bet365Data).filter(league => betfairData[league]).forEach(league => {
-        commonLeagues.push({[Bookie.BET365]: league, [Bookie.BETFAIR]: league})
+    // Find cases where league names are identical
+    Object.keys(bet365Data).forEach(league => {
+        if (betfairData[league]) {
+            commonLeagues.push({[Bookie.BET365]: league, [Bookie.BETFAIR]: league})
+        }
     })
 
-    leagueMap.matched.filter(league => league[Bookie.BET365] !== league[Bookie.BETFAIR]).forEach(league => {
-        if (bet365Data[league[Bookie.BET365]] && betfairData[league[Bookie.BETFAIR]]) {
-            commonLeagues.push({
-                [Bookie.BET365]: league[Bookie.BET365],
-                [Bookie.BETFAIR]: league[Bookie.BETFAIR]}
-            )
+    // Check mappings of leagues that don't match even after applying normalisers
+    leagueMap.mappings.forEach(mapping => {
+        const bet365Map = mapping[Bookie.BET365]
+        const betfairMap = mapping[Bookie.BETFAIR]
+
+        if (bet365Data[bet365Map] && betfairData[betfairMap]) {
+            commonLeagues.push({ [Bookie.BET365]: bet365Map, [Bookie.BETFAIR]:betfairMap })
         }
-    });
+    })
 
     return commonLeagues;
 }

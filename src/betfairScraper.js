@@ -1,6 +1,6 @@
 import {Action, Betfair, Bookie, State} from "./constants"
 import {debug} from "./logger";
-import {awaitPageLoad, awaitMultiElementLoad} from "./util";
+import {awaitPageLoad, awaitMultiElementLoad, normaliseLeague} from "./util";
 
 const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
 
@@ -131,7 +131,7 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
                 const marketStatus = document.querySelector('.market-status-label')?.innerText;
 
                 if (marketStatus !== "In-Play") {
-                    const league = document.querySelector('a[link-type=COMP]')?.innerText;
+                    const league = normaliseLeague(document.querySelector('a[link-type=COMP]')?.innerText);
                     const teams = document.querySelector('span.title').innerText.split(' v ');
                     const matchTime = document.querySelector('.date')?.innerText;
                     const markets = document.querySelectorAll('bf-mini-market-container');
