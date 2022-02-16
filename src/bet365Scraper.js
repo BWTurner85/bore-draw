@@ -122,7 +122,7 @@ const scrapeStateKey = 'scrapeState' + Bookie.BET365;
                     }
                 },
                 () => {
-                    chrome.runtime.sendMessage({ action: Action.REMOVE_TAB, tabId: state.tabId })
+                    chrome.runtime.sendMessage({ action: Action.REMOVE_TAB })
                     chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BET365})
                 }
             )

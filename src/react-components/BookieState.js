@@ -31,7 +31,7 @@ export function BookieState({ name }) {
 
         // Update scrape string when required
         chrome.runtime.onMessage.addListener(message => {
-            debug(message)
+            debug("Message: ", message)
             if (message.bookie !== name) {
                 return
             }

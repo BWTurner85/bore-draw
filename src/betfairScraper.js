@@ -174,7 +174,7 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
                         data[league].push(game)
                     }
 
-                    chrome.runtime.sendMessage({action: Action.SCRAPED_GAME, bookie: 'betfair', game})
+                    chrome.runtime.sendMessage({action: Action.SCRAPED_GAME, bookie: Bookie.BETFAIR, game})
                     chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
                 }
             } catch (e) {

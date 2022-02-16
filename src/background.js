@@ -51,7 +51,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 
         /** Game got scraped **/
         case Action.SCRAPED_GAME:
-            processSingleGame(message.game)
+            processSingleGame(message.bookie, message.game)
+            break;
+
+        case Action.SEND_UNMATCHED_DATA:
+            if (!message.proxied) {
+                chrome.runtime.sendMessage({...message, proxied: true})
+            }
             break;
     }
 })
@@ -68,6 +74,8 @@ function sendAction(action, bookie)
 }
 
 function scrapeSingleGame(bookie, url) {
+    return;
+    debug("Triggering scrape of single game: ", bookie, url)
     chrome.tabs.create(
         { url, active: false, index: 0, pinned: true },
         tab => {
@@ -76,6 +84,7 @@ function scrapeSingleGame(bookie, url) {
         }
     )
 }
+
 /**
  * Kick off scraping of the specified bookie
  *
@@ -86,6 +95,7 @@ function resumeScrape(bookie) {
     const script = './src/' + bookie + 'Scraper.js'
     const url = bookie === Bookie.BETFAIR ? Betfair.SOCCER_HOMEPAGE : Bet365.SOCCER_HOMEPAGE
 
+    debug("Resuming scrape for ", bookie)
     chrome.tabs.create(
         { url: url, active: false, index: 0, pinned: true },
         tab => {
@@ -97,11 +107,12 @@ function resumeScrape(bookie) {
                     tabId: tab.id
                 },
                 () => {
+                    sendAction(Action.SCRAPE_STATE_UPDATED, bookie)
+
                     // Bet365 script injection is handled via a tab update event so only inject betfair
                     if (bookie === Bookie.BETFAIR) {
                         chrome.tabs.executeScript(tab.id, { file: script } )
                     }
-                    sendAction(Action.SCRAPE_STATE_UPDATED, bookie)
                 }
             )
         }
@@ -128,7 +139,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
     switch (alarm.name) {
         case Alarm.CHECK_REFRESH:
             triggerPeriodicRefresh(Bookie.BET365)
-            triggerPeriodicRefresh(Bookie.BETFAIR)
+            setTimeout(() => triggerPeriodicRefresh(Bookie.BETFAIR), 30 * Time.SECOND)
             break;
 
         case Alarm.FLUSH_NOTIFY_CACHE:
@@ -198,10 +209,7 @@ function triggerPeriodicRefresh(bookie) {
                     resumeScrape(bookie)
                 } else if (Date.now() - state.started > 5 * Time.MINUTE) {
                     debug(`[${bookie}] Current tab has been processing for 5+ minutes. Recreating`)
-                    chrome.tabs.remove(
-                        state.tabId,
-                        () => resumeScrape(bookie)
-                    );
+                    chrome.tabs.remove(tab.id, () => resumeScrape(bookie))
                 } else {
                     debug(`[${bookie}] Fresh scrape in progress`)
                 }
@@ -223,9 +231,6 @@ export function notify(game, score, backStake, layStake, boreDrawLayStake)
 {
     const webhook = JSON.parse(localStorage.getItem(Storage.WEBHOOK_URL));
     const notifyCache = JSON.parse(localStorage.getItem(Storage.NOTIFY_CACHE))
-    if (!webhook) {
-        return;
-    }
 
     const message = {
         league: game.league,
@@ -233,13 +238,19 @@ export function notify(game, score, backStake, layStake, boreDrawLayStake)
         teamB: game.teamB,
         score: score.score,
         urls: game.urls,
+        backOdds: score.back_odds,
+        layOdds: score.lay_odds,
+        boreDrawOdds: score.bore_draw_odds,
         backStake,
         layStake,
         boreDrawLayStake,
         profit: Math.min(score.outcomes?.backWins?.total, score.outcomes?.boreDraw?.total, score.outcomes?.other?.total)
     }
 
-    debug("Sending webhook: ", message);
+    debug("Notify called: ", message);
+    if (!webhook) {
+        return
+    }
 
     const hash = game.league + game.teamA + game.teamB + score.score;
     if (notifyCache.find(item => item.hash === hash)) {

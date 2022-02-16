@@ -59,6 +59,7 @@ export const State = {
 export const Storage = {
     BACK_STAKE: 'backStake',
     COMMISSION_DISCOUNT: 'commissionDiscount',
+    LAST_PROCESSED: 'lastProcessed',
     NOTIFY_CACHE: 'notifyCache',
     RETENTION: 'retention',
     WEBHOOK_URL: 'webhookUrl'

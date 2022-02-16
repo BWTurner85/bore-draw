@@ -3,13 +3,14 @@ import { leagueMap } from "./data/leagueMapping";
 import {debug} from "./logger";
 
 export function getUnmatchedGames(bookie) {
-    debug("searching for unmatched games")
+    debug("searching for unmatched games: ", bookie)
     const otherBookie = bookie === Bookie.BETFAIR ? Bookie.BET365 : Bookie.BETFAIR
 
     let unmatchedLeagues = []
     let unmatchedGames = {};
 
     chrome.storage.local.get([ dataKey(Bookie.BET365), dataKey(Bookie.BETFAIR) ], storage => {
+        debug(storage)
         const bet365Data = storage[dataKey(Bookie.BET365)]
         const betfairData = storage[dataKey(Bookie.BETFAIR)]
 
@@ -23,7 +24,6 @@ export function getUnmatchedGames(bookie) {
                     targetLeague = mapping[otherBookie]
                 }
             })
-
             // Target league not found. entire league is unmatched
             if (!target[targetLeague]) {
                 unmatchedLeagues.push(league)
@@ -48,7 +48,6 @@ export function getUnmatchedGames(bookie) {
             })
         }
 
-        debug(bookie)
         chrome.runtime.sendMessage({
             action: Action.SEND_UNMATCHED_DATA,
             bookie,
@@ -61,17 +60,18 @@ export function getUnmatchedGames(bookie) {
 /**
  * Take a single game from one bookie and search for it in the other bookies data
  *
+ * @param bookie
  * @param game
  */
-export function processSingleGame(game) {
-    const otherBookie = game.bookie === Bookie.BETFAIR ? Bookie.BET365 : Bookie.BETFAIR;
-
+export function processSingleGame(bookie, game) {
+    const otherBookie = bookie === Bookie.BETFAIR ? Bookie.BET365 : Bookie.BETFAIR;
+    debug("Processing single game: ", bookie, otherBookie, game)
     chrome.storage.local.get(dataKey(otherBookie), storage => {
         const data = { [game.league]: [ game ] }
         const otherBookieData = storage[dataKey(otherBookie)] || {}
         let processed;
 
-        if (game.bookie === Bookie.BETFAIR) {
+        if (bookie === Bookie.BETFAIR) {
             processed = processData(otherBookieData, data)
         } else {
             processed = processData(data, otherBookieData)
@@ -85,6 +85,7 @@ export function processSingleGame(game) {
         if (processedGame.scrapeTimes[otherBookie] < Date.now() - 60 * Time.MINUTE) {
             // If the game was from bet365 and the betfair game is old trigger an update of it
             if (otherBookie === Bookie.BETFAIR) {
+                debug("Triggering scrape of " + processedGame.urls[otherBookie])
                 chrome.runtime.sendMessage({
                     action: Action.SCRAPE_GAME,
                     bookie: otherBookie,
@@ -126,6 +127,9 @@ export function calculateGame(game, notify = true) {
     const commissionDiscount = JSON.parse(localStorage.getItem(Storage.COMMISSION_DISCOUNT)) || Defaults.COMMISSION_DISCOUNT
     const commission = Betfair.COMMISSION * ((100 - commissionDiscount) / 100)
     const retention = (JSON.parse(localStorage.getItem(Storage.RETENTION))  || Defaults.RETENTION) / 100
+    if (!game.scores) {
+        return
+    }
 
     game.scores.forEach(score => {
         const backOdds = score.back_odds;
@@ -277,11 +281,11 @@ function mergeGames(commonLeagues, bet365Data, betfairData)
 function mergeScores(bet365Scores, betfairScores) {
     let mergedScores = [];
 
+    const boreDrawOdds = betfairScores.find(item => normaliseScore(item.score) === '0-0')?.odds
+
     bet365Scores.forEach(bet365ScoreItem => {
         const normalisedScore = normaliseScore(bet365ScoreItem.score);
-        const betfairScoreItem = betfairScores.find(
-            item => normaliseScore(item.score) === normalisedScore
-        )
+        const betfairScoreItem = betfairScores.find(item => normaliseScore(item.score) === normalisedScore)
 
         if (!betfairScoreItem) {
             return
@@ -291,7 +295,7 @@ function mergeScores(bet365Scores, betfairScores) {
             score: normalisedScore,
             back_odds: bet365ScoreItem.odds,
             lay_odds: betfairScoreItem.odds,
-            bore_draw_odds: betfairScores.find(item => normaliseScore(item.score) === '0-0').odds,
+            bore_draw_odds: boreDrawOdds,
             liquidity: betfairScoreItem.liquidity
         })
     })

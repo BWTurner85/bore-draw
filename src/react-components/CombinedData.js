@@ -28,7 +28,7 @@ export function CombinedData(props) {
         let arbs = []
         for (let league in processedData) {
             processedData[league].forEach(game => {
-                game.scores.forEach(score => {
+                (game.scores || []).forEach(score => {
                     if (score.arbable) {
                         arbs.push({
                             score: score,

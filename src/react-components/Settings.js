@@ -20,20 +20,19 @@ export function Settings(props) {
                 betfair: "None! It's a fake game",
                 bet365: "Still none, still fake"
             },
-            backStake: 12,
-            layStake: 13,
-            boreDrawLayStake: 5.4,
-            profit: 1.39
         }
         const testScore = {
             score: "2-1",
+            back_odds: 12,
+            lay_odds: 13,
+            bore_draw_odds: 5.4,
             outcomes: {
                 backWins: { total: 1.39 },
                 boreDraw: { total: 1.46 },
-                neither: { total: 1.46 }
+                other: { total: 1.46 }
             }
         }
-        notify(testGame, testScore, 12, 13, 5.4)
+        notify(testGame, testScore, 50, 46.37, 7.8)
         alert("Test hook sent")
     }
 
