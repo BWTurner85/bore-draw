@@ -31,9 +31,10 @@
   },
 
   "permissions": [
+    "alarms",
+    "contextMenus",
     "storage",
     "tabs",
-    "contextMenus",
     "https://www.bet365.com.au/*",
     "https://www.betfair.com.au/*"
   ]

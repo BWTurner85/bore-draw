@@ -6,11 +6,9 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
 
 (() => {
     if (location.href === Betfair.SOCCER_HOMEPAGE) {
-        debug("Loaded soccer homepage")
         awaitPageLoad('.navigation-content', () => {
             const allLink = document.querySelector('a[data-nodeid=ALL_FOOTBALL]')
             if (allLink) {
-                debug("Found all football link - clicking")
                 allLink.click()
 
                 awaitLinkLoading('COMPETITION_REGION', processNextRegion)
@@ -52,10 +50,11 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
                 chrome.storage.local.set({
                     [scrapeStateKey]: {
                         ...storage[scrapeStateKey],
-                        leagueIndex: storage[scrapeStateKey].leagueIndex + 3,
+                        leagueIndex: (storage[scrapeStateKey].leagueIndex || 0) + 1,
                         gameIndex: 0
                     }
                 }, () => {
+                    chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
                     awaitPageLoad('a[link-type=COMPETITION_REGION]', () => {
                         document.querySelector('a[link-type=COMPETITION_REGION]').click();
                         awaitLinkLoading('COMP', processNextLeague, 5)
@@ -70,7 +69,8 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
      */
     function processNextLeague() {
         chrome.storage.local.get(scrapeStateKey, storage => {
-            const nextLeagueIndex = storage[scrapeStateKey].leagueIndex || 0
+            const state = storage[scrapeStateKey];
+            const nextLeagueIndex = state.leagueIndex || 0
             const leagues = document.querySelectorAll('a[link-type=COMP]')
 
             if (leagues.item(nextLeagueIndex)) {
@@ -79,24 +79,17 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
             } else {
                 chrome.storage.local.set({
                     [scrapeStateKey]: {
-                        ...storage[scrapeStateKey],
-                        regionIndex: storage[scrapeStateKey].regionIndex + 1,
+                        ...state,
+                        regionIndex: (state.regionIndex || 0) + 1,
                         leagueIndex: 0,
-                        gameIndex: 0
+                        gameIndex: 0,
+                        stopped: Date.now(),
+                        tabId: null,
+                        state: State.INACTIVE
                     }
                 }, () => {
-                    debug("Moving on to the next region")
-                    awaitPageLoad('a.navigation-link[link-type=EVENT_TYPE]', () => {
-                        debug("Found EVENT_TYPE link - clicking it");
-                        document.querySelector('a.navigation-link[link-type=EVENT_TYPE]').click()
-
-                    });
-                    awaitPageLoad('a[data-nodeid=ALL_FOOTBALL]', () => {
-                        debug("Found ALL_FOOTBALL link - clicking it");
-                        document.querySelector('a[data-nodeid=ALL_FOOTBALL]').click()
-                        awaitLinkLoading('COMPETITION_REGION', processNextRegion)
-                    })
-
+                    chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
+                    chrome.runtime.sendMessage({ action: Action.REMOVE_TAB })
                 })
             }
         })
@@ -107,16 +100,26 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
      */
     function processNextRegion() {
         chrome.storage.local.get(scrapeStateKey, storage => {
-            const nextRegionIndex = storage[scrapeStateKey].regionIndex || 0
+            const regionIndex = storage[scrapeStateKey].regionIndex || 0
+            debug(`Processing region index: ${regionIndex}`)
             const regions = document.querySelectorAll('a[link-type=COMPETITION_REGION]')
 
-            if (regions.item(nextRegionIndex)) {
-                regions.item(nextRegionIndex).click()
+            if (regions.item(regionIndex)) {
+                debug("Clicking through to region: ", regions.item(regionIndex).innerText)
+                regions.item(regionIndex).click()
                 awaitLinkLoading('COMP', processNextLeague, 5)
             } else {
-                chrome.runtime.sendMessage({
-                    action: Action.COMPLETED_SCRAPE,
-                    bookie: Bookie.BETFAIR
+                debug("Final region processed. Returning to start");
+                chrome.storage.local.set({
+                    [scrapeStateKey]: {
+                        regionIndex: 0,
+                        leagueIndex: 0,
+                        gameIndex: 0,
+                        tabId: null
+                    }
+                }, () => {
+                    chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
+                    processNextRegion()
                 })
             }
         })
@@ -159,7 +162,7 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
                         teamB: teams[1],
                         scores: scoreData,
                         url: location.href,
-                        matchTime: matchTime ? Date.parse(matchTime) : null,
+                        matchTime: matchTime ? Date.parse(matchTime + "2022") : null,
                         scrapeTime: Date.now()
                     }
                     const existingIndex = data[league].findIndex(item => item.url === game.url);
@@ -171,7 +174,8 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
                         data[league].push(game)
                     }
 
-                    chrome.runtime.sendMessage({bookie: 'betfair', game})
+                    chrome.runtime.sendMessage({action: Action.SCRAPED_GAME, bookie: 'betfair', game})
+                    chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
                 }
             } catch (e) {
                 console.error("Failed to collect game data: ", e)
@@ -184,7 +188,10 @@ const scrapeStateKey = 'scrapeState' + Bookie.BETFAIR;
             }
 
             chrome.storage.local.set(storageData, () => {
-                if (!standalone) {
+                if (standalone) {
+                    chrome.runtime.sendMessage({ action: Action.REMOVE_TAB })
+                } else {
+                    chrome.runtime.sendMessage({action: Action.SCRAPE_STATE_UPDATED, bookie: Bookie.BETFAIR})
                     document.querySelector('a[link-type=COMP]').click();
                     awaitLinkLoading('EVENT', processNextGame)
                 }

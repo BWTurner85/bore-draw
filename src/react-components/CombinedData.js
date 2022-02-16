@@ -1,6 +1,6 @@
 import React from "react";
 import {Bookie} from "../constants";
-import {mergeLeagueData} from "../dataProcessor";
+import {processData} from "../dataProcessor";
 import ReactJson from "react-json-view";
 import {debug} from "../logger";
 
@@ -13,9 +13,10 @@ export function CombinedData(props) {
             chrome.storage.local.get(
                 [ Bookie.BET365 + 'Data', Bookie.BETFAIR + 'Data' ],
                 storage => {
-                    const mergedData = mergeLeagueData(
+                    const mergedData = processData(
                         storage[Bookie.BET365 + 'Data'] || {},
-                        storage[Bookie.BETFAIR + 'Data'] || {}
+                        storage[Bookie.BETFAIR + 'Data'] || {},
+                        false
                     )
                     setProcessedData(mergedData)
                 }
@@ -46,7 +47,7 @@ export function CombinedData(props) {
     return (
         <div id="combinedData">
             <strong>Combined data - matching games</strong>
-            <ReactJson src={processedData} collapsed={1} />
+            <ReactJson src={processedData} collapsed={true} />
 
             <strong>Arbable events</strong>
             <ReactJson src={arbEvents} collapsed={1} />

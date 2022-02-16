@@ -1,9 +1,16 @@
 export const Action = {
+    NOTIFY: 'notify',
     REMOVE_TAB: 'removeTab',
-    START_SCRAPE: 'startScrape',
-    ABORT_SCRAPE: 'abortScrape',
-    COMPLETED_SCRAPE: 'completedScrape',
-    SCRAPE_STATE_UPDATED: 'scrapeStateUpdated'
+    SCRAPE_GAME: 'scrapeGame',
+    SCRAPED_GAME: 'scrapedGame',
+    SCRAPE_STATE_UPDATED: 'scrapeStateUpdated',
+    SEND_UNMATCHED_DATA: 'sendUnmatchedData'
+}
+
+export const Alarm = {
+    CHECK_REFRESH: 'checkRefresh',
+    FLUSH_NOTIFY_CACHE: 'flushNotifyCache',
+    PURGE_OLD_GAMES: 'purgeOldGames'
 }
 
 export const Bookie = {
@@ -38,15 +45,38 @@ export const Betfair = {
     COMMISSION: 0.05
 }
 
+export const Defaults = {
+    STAKE: 50,
+    COMMISSION_DISCOUNT: 0,
+    RETENTION: 80
+}
+
 export const State = {
     IN_PROGRESS: 'inProgress',
-    ABORTED: 'aborted',
-    COMPLETED: 'completed'
+    INACTIVE: 'inactive',
 }
 
 export const Storage = {
     BACK_STAKE: 'backStake',
     COMMISSION_DISCOUNT: 'commissionDiscount',
+    NOTIFY_CACHE: 'notifyCache',
     RETENTION: 'retention',
     WEBHOOK_URL: 'webhookUrl'
+}
+
+export const Time = {
+    SECOND: 1000,
+    MINUTE: 60 * 1000,
+    HOUR: 60 * 60 * 1000,
+    DAY: 24 * 60 * 60 * 1000
+}
+
+/**
+ * Shortcut function to return to storage key used for storing game data
+ *
+ * @param {string} bookie
+ * @returns {string}
+ */
+export function dataKey(bookie) {
+    return bookie + 'Data';
 }

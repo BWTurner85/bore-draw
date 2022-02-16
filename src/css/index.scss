@@ -5,16 +5,35 @@
   gap: 10px;
   margin: 10px;
 
-  .settings {
+  #settings {
     grid-column: 1 / 3;
-    grid-row: 1
+    grid-row: 1;
+
+    .input {
+      margin: 2px 5px;
+
+      input {
+        margin-left: 5px;
+
+        &[type=number] {
+          width: 50px;
+        }
+      }
+
+      &#webhook {
+        input {
+          width: 600px;
+        }
+      }
+    }
   }
+
   .bookieState {
     float: left;
     min-height: 158px;
     display: inline-block;
     border: 1px solid #ccc;
-    padding: 4px  ;
+    padding: 4px;
 
     button {
       margin: 2px;
@@ -28,6 +47,11 @@
     &#betfairState {
       grid-column: 2;
       grid-row: 2;
+    }
+
+    .accordion-body {
+      max-height: 75vh;
+      overflow: auto;
     }
   }
 

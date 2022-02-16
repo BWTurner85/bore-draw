@@ -1,6 +1,7 @@
-import {Action, Bet365, Betfair, Bookie, State} from "./constants";
+import {Action, Alarm, Bet365, Betfair, Bookie, dataKey, State, Storage, Time} from "./constants";
 import {debug} from "./logger";
 import {upsertToLocalStorageObject} from "./util";
+import {processSingleGame, processData} from "./dataProcessor";
 
 /**
  * Listen for tab load events.
@@ -17,30 +18,8 @@ chrome.tabs.onUpdated.addListener((id, info, tab)  => {
                 }
             })
         }
-
-        if (tab.url.startsWith(Betfair.SOCCER_GAME_PAGE)) {
-            //chrome.tabs.executeScript(tab.id, { file: "./src/betfairScraper.js" } )
-        }
     }
 });
-
-/**
- * Listen for tab close events.
- *
- * If the scraping tab is closed register that fact and abort the current scrape
- */
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-    const bet365StateKey = stateKey(Bookie.BET365)
-    const betfairStateKey = stateKey(Bookie.BETFAIR)
-
-    chrome.storage.local.get([ bet365StateKey, betfairStateKey ], storage => {
-        if (tabId === storage[bet365StateKey]?.tabId) {
-            abortScrape(Bookie.BET365)
-        } else if (tabId === storage[betfairStateKey]?.tabId) {
-            abortScrape(Bookie.BETFAIR)
-        }
-    })
-})
 
 /**
  * Configure toolbar button to open the options page as a full tab instead of a small popup
@@ -54,29 +33,26 @@ chrome.browserAction.onClicked.addListener(function (activeTab) {
  * Message listener
  */
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    debug("Message received: ", message);
-
     switch (message.action) {
+        /** Trigger webhook **/
+        case Action.NOTIFY:
+            notify(message.game, message.score, message.backStake, message.layStake, message.boreDrawLayStake)
+            break
+
         /** Close a tab **/
         case Action.REMOVE_TAB:
-            chrome.tabs.remove(message.tabId)
+            chrome.tabs.remove(message.tabId || sender.tab.id)
             break
 
-        /** Kick off scraping for the specified bookie */
-        case Action.START_SCRAPE:
-            startScrape(message.bookie)
+        /** Trigger scraping a specific game **/
+        case Action.SCRAPE_GAME:
+            scrapeSingleGame(message.bookie, message.url)
             break
 
-        /** Scraping was aborted **/
-        case Action.ABORT_SCRAPE:
-            abortScrape(message.bookie);
+        /** Game got scraped **/
+        case Action.SCRAPED_GAME:
+            processSingleGame(message.game)
             break;
-
-        /** Notification the scraping has been completed for a bookie **/
-        case Action.COMPLETED_SCRAPE:
-            finaliseScrape(message.bookie);
-            sendAction(Action.SCRAPE_STATE_UPDATED, message.bookie)
-            break
     }
 })
 
@@ -91,20 +67,25 @@ function sendAction(action, bookie)
     chrome.runtime.sendMessage({ action, bookie })
 }
 
-
+function scrapeSingleGame(bookie, url) {
+    chrome.tabs.create(
+        { url, active: false, index: 0, pinned: true },
+        tab => {
+            const script = './src/' + bookie + 'Scraper.js'
+            chrome.tabs.executeScript(tab.id, { file: script } )
+        }
+    )
+}
 /**
  * Kick off scraping of the specified bookie
  *
  * @param bookie
  */
-function startScrape(bookie) {
-    debug("Kicking off scraping for " + bookie)
+function resumeScrape(bookie) {
     const storageKey = 'scrapeState' + bookie
     const script = './src/' + bookie + 'Scraper.js'
     const url = bookie === Bookie.BETFAIR ? Betfair.SOCCER_HOMEPAGE : Bet365.SOCCER_HOMEPAGE
-    const bookieScrapeState = bookie === Bookie.BETFAIR
-                            ? { regionIndex: 0, leagueIndex: 0, gameIndex: 0 }
-                            : { lastLeague: -1 }
+
     chrome.tabs.create(
         { url: url, active: false, index: 0, pinned: true },
         tab => {
@@ -113,11 +94,13 @@ function startScrape(bookie) {
                 {
                     state: State.IN_PROGRESS,
                     started: Date.now(),
-                    tabId: tab.id,
-                    ...bookieScrapeState
+                    tabId: tab.id
                 },
                 () => {
-                    chrome.tabs.executeScript(tab.id, { file: script } )
+                    // Bet365 script injection is handled via a tab update event so only inject betfair
+                    if (bookie === Bookie.BETFAIR) {
+                        chrome.tabs.executeScript(tab.id, { file: script } )
+                    }
                     sendAction(Action.SCRAPE_STATE_UPDATED, bookie)
                 }
             )
@@ -126,100 +109,150 @@ function startScrape(bookie) {
 }
 
 /**
- * Mark the scrape process for a given bookie as having been aborted
- * @param bookie
- */
-function abortScrape(bookie) {
-    chrome.local.storage.get(stateKey(bookie), storage => {
-        const tabId = storage[stateKey(bookie)]?.tabId
-        if (tabId) {
-            try {
-                chrome.tabs.remove(tabId)
-            } catch (e) { }
-        }
-    })
-
-    upsertToLocalStorageObject(
-        stateKey(bookie),
-        { tabId: null, state: State.ABORTED },
-        () => sendAction(Action.SCRAPE_STATE_UPDATED, bookie)
-    )
-}
-
-/**
- * Finalise scraping for a given bookie when the injected script informs us it's done
- *
- * @param {string} bookie
- */
-function finaliseScrape(bookie) {
-    debug("Scrape completed for bookie: ", bookie)
-    const scrapeStateKey = stateKey(bookie)
-
-    chrome.storage.local.get(scrapeStateKey, storage => {
-        const tabId = storage[scrapeStateKey].tabId;
-
-        chrome.storage.local.set(
-            { [scrapeStateKey]: {
-                tabId: null,
-                lastCompleted: Date.now(),
-                state: State.COMPLETED
-            } },
-            () => {
-                chrome.tabs.remove(tabId)
-                sendAction(Action.SCRAPE_STATE_UPDATED, bookie)
-            }
-        )
-    })
-}
-
-/**
  * Shortcut function to return the storage key used for scraping state
  *
  * @param {string} bookie
+ * @return {string}
  */
 function stateKey(bookie) {
     return 'scrapeState' + bookie;
 }
 
-/** Configure an alarm to trigger regularly and use to kick off periodic refreshes */
-chrome.alarms.create(
-    'checkRefresh',
-    {
-        delayInMinutes: 1,
-        periodInMinutes: 1
-    }
-)
+/** Configure alarms for periodic events **/
+chrome.alarms.create(Alarm.CHECK_REFRESH, { delayInMinutes: 1, periodInMinutes: 1 })
+chrome.alarms.create(Alarm.FLUSH_NOTIFY_CACHE, { delayInMinutes: 30, periodInMinutes: 60 })
+chrome.alarms.create(Alarm.PURGE_OLD_GAMES, { delayInMinutes: 60, periodInMinutes: 60 })
 
 /** Listen for alarm events **/
 chrome.alarms.onAlarm.addListener(alarm => {
-    if (alarm.name === 'checkRefresh') {
-        triggerPeriodicRefresh();
+    switch (alarm.name) {
+        case Alarm.CHECK_REFRESH:
+            triggerPeriodicRefresh(Bookie.BET365)
+            triggerPeriodicRefresh(Bookie.BETFAIR)
+            break;
+
+        case Alarm.FLUSH_NOTIFY_CACHE:
+            flushNotifyCache()
+            break;
+
+        case Alarm.PURGE_OLD_GAMES:
+            purgeOldGames(Bookie.BET365)
+            purgeOldGames(Bookie.BETFAIR)
+            break;
     }
 })
 
-/** Trigger periodic refreshes **/
-function triggerPeriodicRefresh() {
-    console.log("Triggering periodic refresh")
-    // Trigger full refresh if more than 1 day since last one
+/** Flush old items from the notification cache */
+function flushNotifyCache() {
+    let cache = JSON.parse(localStorage.getItem(Storage.NOTIFY_CACHE)) || []
+    const currentCacheSize = cache.length;
 
-    // trigger refresh of oldest listed game
+    cache = cache.filter(item => item.time > (Date.now() - 60 * Time.MINUTE))
+
+    debug("Flushed old items from notify cache. Removed " + (currentCacheSize - cache.length) + " entries");
+    localStorage.setItem(Storage.NOTIFY_CACHE, JSON.stringify(cache))
 }
 
-/*
-chrome.contextMenus.create({
-    title: "Scrape game page",
-    "contexts": [ "browser_action" ],
-    onclick: () => {
-        chrome.tabs.query(
-            { active: true, currentWindow: true },
-            tabs => {
-                const tab = tabs[0]
-                if (tab.url.startsWith(Bet365.HOST)) {
-                    chrome.tabs.executeScript(tab.id, { file: "./src/bet365Scraper.js" } )
-                } else if (tab.url.startsWith(Betfair.SOCCER_GAME_PAGE)) {
-                    chrome.tabs.executeScript(tab.id, { file: "./src/betfairScraper.js" } )
-                }
+/** Purge data for games that have already happened **/
+function purgeOldGames(bookie) {
+    chrome.storage.local.get(dataKey(bookie), storage => {
+        const data = storage[dataKey(bookie)]
+
+        for (let league in data) {
+            data[league] = data[league].filter(game => game.matchTime > Date.now())
+
+            if (data[league].length === 0) {
+                delete(data[league])
             }
-        )
+        }
+
+        debug("Purging old games for ", bookie, ". AFTER: ", data)
+
+        chrome.storage.local.set({ [dataKey(bookie)]: data })
+    })
+}
+
+/**
+ * This function is triggered by an alarm every minute and takes care of managing
+ * periodic partial refreshes for the selected bookie
+ *
+ * @param bookie
+ */
+function triggerPeriodicRefresh(bookie) {
+    chrome.storage.local.get([ stateKey(bookie) ], storage => {
+        const state = storage[stateKey(bookie)] || {}
+        debug(`[${bookie}] Checking periodic scrape. Current state: `, state)
+
+        if (!state.state || state.state === State.INACTIVE) {
+            if (!state.stopped || (Date.now() - state.stopped) > (30 * Time.SECOND)) {
+                debug(`[${bookie}] Resuming scrape`)
+                resumeScrape(bookie)
+            } else {
+                debug(`[${bookie}] Previously finished too recently. Waiting`)
+            }
+        } else {
+            chrome.tabs.get(state.tabId, tab => {
+                if (!tab) {
+                    const suppressError = chrome.runtime.lastError;
+                    debug(`[${bookie}] In progress tab was closed unexpectedly. Resuming`);
+                    resumeScrape(bookie)
+                } else if (Date.now() - state.started > 5 * Time.MINUTE) {
+                    debug(`[${bookie}] Current tab has been processing for 5+ minutes. Recreating`)
+                    chrome.tabs.remove(
+                        state.tabId,
+                        () => resumeScrape(bookie)
+                    );
+                } else {
+                    debug(`[${bookie}] Fresh scrape in progress`)
+                }
+            })
+        }
+    })
+}
+
+/**
+ * Send webhook notification about an arb event
+ *
+ * @param game
+ * @param score
+ * @param backStake
+ * @param layStake
+ * @param boreDrawLayStake
+ */
+export function notify(game, score, backStake, layStake, boreDrawLayStake)
+{
+    const webhook = JSON.parse(localStorage.getItem(Storage.WEBHOOK_URL));
+    const notifyCache = JSON.parse(localStorage.getItem(Storage.NOTIFY_CACHE))
+    if (!webhook) {
+        return;
     }
-})*/
+
+    const message = {
+        league: game.league,
+        teamA: game.teamA,
+        teamB: game.teamB,
+        score: score.score,
+        urls: game.urls,
+        backStake,
+        layStake,
+        boreDrawLayStake,
+        profit: Math.min(score.outcomes?.backWins?.total, score.outcomes?.boreDraw?.total, score.outcomes?.other?.total)
+    }
+
+    debug("Sending webhook: ", message);
+
+    const hash = game.league + game.teamA + game.teamB + score.score;
+    if (notifyCache.find(item => item.hash === hash)) {
+        debug("Notification for ", message, "previously sent")
+        //return;
+    } else if (game.league !== "Test League") {
+        debug("Sending webhook to ", webhook, ": ", message)
+        notifyCache.push({ time: Date.now(), hash })
+    }
+
+    fetch(webhook, {
+        body: JSON.stringify(message),
+        method: "POST"
+    });
+    localStorage.setItem(Storage.NOTIFY_CACHE, JSON.stringify(notifyCache))
+}

@@ -3,92 +3,113 @@ import {Action, State} from "../constants";
 import {Accordion} from "react-bootstrap";
 import ReactJson from "react-json-view";
 import 'bootstrap/dist/css/bootstrap.min.css';
+import {getUnmatchedGames} from "../dataProcessor";
+import {debug} from "../logger";
 
-export function BookieState(props) {
-    const scrapeStateKey = 'scrapeState' + props.name
-    const dataKey = props.name + 'Data'
+export function BookieState({ name }) {
+    const scrapeStateKey = 'scrapeState' + name
+    const dataKey = name + 'Data'
 
-    const [ stateString, setStateString ] = React.useState("")
-    const [ rawData, setRawData ] = React.useState({});
-
+    const [ rawData, setRawData ] = React.useState({})
+    const [ rawState, setRawState ] = React.useState({})
+    const [ unmatchedLeagues, setUnmatchedLeagues ] = React.useState([]);
+    const [ unmatchedGames, setUnmatchedGames ] = React.useState({});
     /**
      * One off configuration when component is first loaded.
      *
      * Set the initial state string and configure message listener to listen for state updates
      */
     React.useEffect(() => {
-        // Set state string immediately upon load
-        setStateStringFromState()
+        // Fetch unmatched games
+        getUnmatchedGames(name)
 
         // Set raw data on load
-        chrome.storage.local.get(dataKey, storage => {
+        chrome.storage.local.get([ scrapeStateKey, dataKey ], storage => {
             setRawData(storage[dataKey] || {})
+            setRawState(storage[scrapeStateKey] || {})
         })
 
         // Update scrape string when required
         chrome.runtime.onMessage.addListener(message => {
-            if (message.bookie === props.name && message.action === Action.SCRAPE_STATE_UPDATED) {
-                setStateStringFromState()
+            debug(message)
+            if (message.bookie !== name) {
+                return
             }
+
+            if (message.action === Action.SCRAPE_STATE_UPDATED) {
+                chrome.storage.local.get([ scrapeStateKey, dataKey] , storage => {
+                    setRawState(storage[scrapeStateKey])
+                    setRawData(storage[dataKey])
+                })
+            }
+
+            if (message.action === Action.SEND_UNMATCHED_DATA) {
+                setUnmatchedLeagues(message.leagues)
+                setUnmatchedGames(message.games)
+            }
+
         })
     }, [])
 
-    /** Check the stored scrape state and update the state string accordingly*/
-    function setStateStringFromState() {
-        chrome.storage.local.get(scrapeStateKey, storage => {
-            const state = storage[scrapeStateKey] ?? {}
-            let label
-
-            switch (state.state) {
-                case State.COMPLETED:
-                    label = "Last full scrape: " + (new Date(state.lastCompleted)).toLocaleString()
-                    break
-                case State.IN_PROGRESS:
-                    label = "Full scrape in progress. Started " + (new Date(state.started)).toLocaleString()
-                    break
-                case State.ABORTED:
-                    if (state.lastCompleted) {
-                        label = "Latest scrape aborted. Last successful scrape completed: " + (new Date(state.lastCompleted)).toLocaleString()
-                    } else {
-                        label = "Latest scrape aborted. No full scrape completed"
-                    }
-                    break
-                default:
-                    label = "Full scrape not yet started"
-            }
-
-            setStateString(label)
-        })
-    }
-
-    /** Fire off a message to start scraping */
-    function startScrape() {
-        chrome.runtime.sendMessage({action: Action.START_SCRAPE, bookie: props.name})
+    /** Clear state data **/
+    function clearState() {
+        chrome.storage.local.set({ [scrapeStateKey]: { }})
+        setRawState({})
     }
 
     /** Clear bookie data **/
     function clearData() {
         chrome.storage.local.set({ [dataKey]: { }})
-        setStateString("Data cleared: " + new Date().toLocaleString())
         setRawData({})
-        chrome.runtime.sendMessage({ action: Action.ABORT_SCRAPE, bookie: props.name })
+    }
+
+    /** State injection hackery */
+    function setState() {
+        const state = prompt("Enter state JSON", JSON.stringify(rawState))
+        try {
+            if (!state) {
+                return
+            }
+
+            const parsedState = JSON.parse(state)
+            if (parsedState) {
+                chrome.storage.local.set({[scrapeStateKey]: parsedState});
+                setRawState(parsedState)
+            }
+        } catch (e) {
+            alert("Unable to set state. Invalid JSON: " + e)
+        }
     }
 
     return (
-        <div className='bookieState' id={props.name + "State"}>
-            <strong>{props.name}</strong> <br />
-            <span className='status'>{stateString}</span> <br />
-            <button className='startScrape' onClick={() => startScrape()}>
-                Start Scrape
-            </button>
+        <div className='bookieState' id={name + "State"}>
+            <strong>{name}</strong> <br />
 
             <button onClick={() => clearData()}>Clear data</button>
+            <button onClick={() => clearState()}>Clear state</button>
+            <button onClick={() => setState()}>Set state</button>
 
             <Accordion flush>
                 <Accordion.Item eventKey="0">
+                    <Accordion.Header>Raw scrape state</Accordion.Header>
+                    <Accordion.Body>
+                        <ReactJson src={rawState} collapsed={1}/>
+                    </Accordion.Body>
+                </Accordion.Item>
+                <Accordion.Item eventKey="1">
                     <Accordion.Header>Raw data</Accordion.Header>
                     <Accordion.Body>
                         <ReactJson src={rawData} collapsed={1}/>
+                    </Accordion.Body>
+                </Accordion.Item>
+                <Accordion.Item eventKey="2">
+                    <Accordion.Header>Unmatched data</Accordion.Header>
+                    <Accordion.Body>
+                        <strong>Leagues</strong>
+                        <ReactJson src={unmatchedLeagues} collapsed={1} />
+
+                        <strong>Games</strong>
+                        <ReactJson src={unmatchedGames} collapsed={1} />
                     </Accordion.Body>
                 </Accordion.Item>
             </Accordion>
